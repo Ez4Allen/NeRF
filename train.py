@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 
 from dataset import load_blender_data_raw, build_ray_bank
-from model import TinyNeRF_PE
+from nerf_model import TinyNeRF_PE
 from render import sample_along_rays, volume_render, sample_pdf
 
 def mse2psnr(x):  # x: scalar tensor
