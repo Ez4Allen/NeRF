@@ -1,61 +1,59 @@
+# dataset.py (compact style)
+
 import os, json
 import numpy as np
 import imageio.v2 as imageio
-
+import torch
+import torch.nn.functional as F
 
 def load_blender_data_raw(basedir):
-    """
-    Load the Blender (nerf_synthetic) dataset.
-    
-    Returns:
-      imgs    : [N, H, W, C]  Raw images (RGB or RGBA depending on PNG)
-      poses   : [N, 4, 4]     Camera-to-world matrices (c2w)
-      hwf     : [H, W, focal] Intrinsics (pixel units)
-      i_split : [train_ids, val_ids, test_ids]
-    """
-
     splits = ['train', 'val', 'test']
-
-    # Load JSON metadata for each split
-    metas = {
-        s: json.load(open(os.path.join(basedir, f"transforms_{s}.json"), "r"))
-        for s in splits
-    }
+    metas = {s: json.load(open(os.path.join(basedir, f'transforms_{s}.json'), 'r')) for s in splits}
 
     all_imgs, all_poses, counts = [], [], [0]
-
-    # Load every image and its corresponding c2w pose
     for s in splits:
         meta = metas[s]
         imgs, poses = [], []
-
-        for frame in meta["frames"]:
-            fname = os.path.join(basedir, frame["file_path"] + ".png")
-
-            # Load image (RGB or RGBA) and normalize to [0,1]
+        for fr in meta['frames']:
+            fname = os.path.join(basedir, fr['file_path'] + '.png')
             im = imageio.imread(fname).astype(np.float32) / 255.0
             imgs.append(im)
-
-            # Load camera-to-world transform matrix
-            poses.append(np.array(frame["transform_matrix"], dtype=np.float32))
-
-        imgs  = np.stack(imgs,  axis=0)   # [Ns, H, W, C]
-        poses = np.stack(poses, axis=0)   # [Ns, 4, 4]
-
+            poses.append(np.array(fr['transform_matrix'], dtype=np.float32))
+        imgs = np.stack(imgs, 0); poses = np.stack(poses, 0)
         counts.append(counts[-1] + imgs.shape[0])
-        all_imgs.append(imgs)
-        all_poses.append(poses)
+        all_imgs.append(imgs); all_poses.append(poses)
 
-    # Concatenate train/val/test into one array each
-    imgs  = np.concatenate(all_imgs,  axis=0)
-    poses = np.concatenate(all_poses, axis=0)
+    imgs  = np.concatenate(all_imgs,  0)
+    poses = np.concatenate(all_poses, 0)
 
-    # Camera intrinsics (same for all frames)
     H, W = imgs[0].shape[:2]
-    camera_angle_x = float(metas["train"]["camera_angle_x"])
+    camera_angle_x = float(metas['train']['camera_angle_x'])
     focal = 0.5 * W / np.tan(0.5 * camera_angle_x)
 
-    # Split indices for train / val / test
     i_split = [np.arange(counts[i], counts[i+1]) for i in range(3)]
-
     return imgs, poses, [H, W, focal], i_split
+
+def get_rays(H, W, focal, c2w):
+    device = c2w.device
+    i, j = torch.meshgrid(
+        torch.arange(W, dtype=torch.float32, device=device),
+        torch.arange(H, dtype=torch.float32, device=device),
+        indexing='xy'
+    )
+    dirs = torch.stack([(i - W*0.5)/focal, -(j - H*0.5)/focal, -torch.ones_like(i)], -1)
+    R, t = c2w[:3,:3], c2w[:3,3]
+    rd = F.normalize(dirs @ R.T, dim=-1)
+    ro = t.expand_as(rd)
+    return ro, rd
+
+@torch.no_grad()
+def build_ray_bank(imgs, poses, H, W, focal):
+    N = imgs.shape[0]
+    ro_all, rd_all = [], []
+    for n in range(N):
+        ro, rd = get_rays(H, W, focal, poses[n])
+        ro_all.append(ro); rd_all.append(rd)
+    ro_all = torch.stack(ro_all, 0)  # [N,H,W,3]
+    rd_all = torch.stack(rd_all, 0)
+    rgb = imgs[..., :3]
+    return ro_all.reshape(-1,3), rd_all.reshape(-1,3), rgb.reshape(-1,3)
