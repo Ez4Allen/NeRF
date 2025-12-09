@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../render_example.png" width="70%" />
+  <img src="render_example.png" width="70%" />
 </p>
 
 # Minimal NeRF (PyTorch)
