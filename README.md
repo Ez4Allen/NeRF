@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../render_example.png" width="70%" />
+</p>
+
 # Minimal NeRF (PyTorch)
 
 A compact PyTorch implementation of Neural Radiance Fields (NeRF).  
