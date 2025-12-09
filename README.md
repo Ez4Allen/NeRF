@@ -1,6 +1,7 @@
 <p align="center">
   <img src="render_example.png" width="50%" />
 </p>
+<p align="center"><em>Sample novel-view rendering from the trained NeRF.</em></p>
 
 # Minimal NeRF (PyTorch)
 
